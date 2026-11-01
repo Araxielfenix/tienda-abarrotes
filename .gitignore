@@ -1,0 +1,28 @@
+# Dependencias
+node_modules/
+
+# Entornos
+.env
+*.log
+
+# Base de datos y datos de usuario (se crean al ejecutar)
+products.json
+sales.json
+store.db
+
+# Uploads de fotos de productos (usuario-specifico)
+public/uploads/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/

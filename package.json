@@ -1,0 +1,16 @@
+{
+  "name": "tienda-abarrotes",
+  "version": "1.0.0",
+  "description": "Punto de venta estático para tienda de abarrotes - funciona en GitHub Pages",
+  "homepage": "https://TU-USUARIO.github.io/tienda-abarrotes",
+  "scripts": {
+    "start": "serve .",
+    "dev": "serve ."
+  },
+  "devDependencies": {
+    "serve": "^14.2.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

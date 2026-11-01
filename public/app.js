@@ -1,0 +1,624 @@
+/**
+ * Tienda de Abarrotes - Punto de Venta Estático
+ * Funciona 100% en el navegador con localStorage
+ * Ideal para GitHub Pages (sin servidor)
+ */
+
+// Estado de la aplicación
+let cart = [];
+let currentProductFound = null;
+
+// Datos de ejemplo iniciales (se cargan solo si no hay nada en localStorage)
+const PRODUCTOS_EJEMPLO = [
+  { id: 'p1', name: 'Leche Lala 1L', price: 28.50, category: 'Lácteos', barcode: '7501010101012', stock: 50, photo_url: '' },
+  { id: 'p2', name: 'Pan Bimbo Blanco', price: 45.00, category: 'Panadería', barcode: '7501010202013', stock: 30, photo_url: '' },
+  { id: 'p3', name: 'Huevos blancos (docena)', price: 42.00, category: 'Lácteos', barcode: '7501010303014', stock: 40, photo_url: '' },
+  { id: 'p4', name: 'Aceite Vegetal 900ml', price: 55.00, category: 'Despensa', barcode: '7501010404015', stock: 25, photo_url: '' },
+  { id: 'p5', name: 'Arroz blanco 1kg', price: 24.50, category: 'Despensa', barcode: '7501010505016', stock: 60, photo_url: '' },
+  { id: 'p6', name: 'Frijol negro 1kg', price: 28.00, category: 'Despensa', barcode: '7501010606017', stock: 45, photo_url: '' },
+  { id: 'p7', name: 'Azúcar blanca 1kg', price: 22.00, category: 'Despensa', barcode: '7501010707018', stock: 55, photo_url: '' },
+  { id: 'p8', name: 'Sal de mesa 250g', price: 12.00, category: 'Despensa', barcode: '7501010808019', stock: 70, photo_url: '' },
+  { id: 'p9', name: 'Coca-Cola 600ml', price: 18.00, category: 'Bebidas', barcode: '7501010909020', stock: 80, photo_url: '' },
+  { id: 'p10', name: 'Agua Ciel 600ml', price: 12.00, category: 'Bebidas', barcode: '7501011010021', stock: 90, photo_url: '' },
+  { id: 'p11', name: 'Jabón Zote rosa', price: 35.00, category: 'Limpieza', barcode: '7501011111022', stock: 35, photo_url: '' },
+  { id: 'p12', name: 'Papel Higiénico (4 rollos)', price: 45.00, category: 'Limpieza', barcode: '7501011212023', stock: 40, photo_url: '' },
+];
+
+// Elementos DOM
+const els = {
+  searchInput: document.getElementById('search-input'),
+  productsGrid: document.getElementById('products-grid'),
+  cartItems: document.getElementById('cart-items'),
+  emptyCart: document.querySelector('.empty-cart'),
+  summarySubtotal: document.getElementById('summary-subtotal'),
+  summaryTax: document.getElementById('summary-tax'),
+  summaryTotal: document.getElementById('summary-total'),
+  amountGiven: document.getElementById('amount-given'),
+  changeDisplay: document.getElementById('change-display'),
+  btnCompleteSale: document.getElementById('btn-complete-sale'),
+  btnPrintTicket: document.getElementById('btn-print-ticket'),
+  btnClearCart: document.getElementById('btn-clear-cart'),
+  btnMenu: document.getElementById('btn-menu'),
+  btnCloseMenu: document.getElementById('btn-close-menu'),
+  sidebarMenu: document.getElementById('sidebar-menu'),
+  modalOverlay: document.getElementById('modal-overlay'),
+  cameraModal: document.getElementById('camera-modal'),
+  cameraVideo: document.getElementById('camera-video'),
+  cameraCanvas: document.getElementById('camera-canvas'),
+  btnCapture: document.getElementById('btn-capture'),
+  btnSwitchCamera: document.getElementById('btn-switch-camera'),
+  btnCloseCamera: document.getElementById('btn-close-camera'),
+  cameraError: document.getElementById('camera-error'),
+  cameraResult: document.getElementById('camera-result'),
+  productFound: document.getElementById('product-found'),
+  productFoundImg: document.getElementById('product-found-img'),
+  productFoundName: document.getElementById('product-found-name'),
+  productFoundBarcode: document.getElementById('product-found-barcode'),
+  productFoundPrice: document.getElementById('product-found-price'),
+  btnAddFound: document.getElementById('btn-add-found'),
+  btnCloseFound: document.getElementById('btn-close-found'),
+  btnCamera: document.getElementById('btn-camera'),
+  btnProducts: document.getElementById('btn-products'),
+  btnManageProducts: document.getElementById('btn-manage-products'),
+  btnViewSales: document.getElementById('btn-view-sales'),
+  btnImportOpenFood: document.getElementById('btn-import-openfood'),
+  btnExportCsv: document.getElementById('btn-export-csv'),
+  modalProductsOverlay: document.getElementById('modal-products-overlay'),
+  modalProducts: document.getElementById('modal-products'),
+  btnCloseProducts: document.getElementById('btn-close-products'),
+  prodName: document.getElementById('prod-name'),
+  prodPrice: document.getElementById('prod-price'),
+  prodCategory: document.getElementById('prod-category'),
+  prodBarcode: document.getElementById('prod-barcode'),
+  prodStock: document.getElementById('prod-stock'),
+  prodPhoto: document.getElementById('prod-photo'),
+  btnSaveProduct: document.getElementById('btn-save-product'),
+  btnCancelProduct: document.getElementById('btn-cancel-product'),
+  existingProducts: document.getElementById('existing-products'),
+  modalSalesOverlay: document.getElementById('modal-sales-overlay'),
+  modalSales: document.getElementById('modal-sales'),
+  btnCloseSales: document.getElementById('btn-close-sales'),
+  salesTableBody: document.getElementById('sales-table-body'),
+};
+
+// ==================== LOCALSTORAGE ====================
+function loadFromStorage() {
+  const savedProducts = localStorage.getItem('abarrotes_products');
+  const savedSales = localStorage.getItem('abarrotes_sales');
+
+  if (savedProducts) {
+    return JSON.parse(savedProducts);
+  }
+  // Guardar productos de ejemplo la primera vez
+  localStorage.setItem('abarrotes_products', JSON.stringify(PRODUCTOS_EJEMPLO));
+  return PRODUCTOS_EJEMPLO;
+}
+
+let products = loadFromStorage();
+
+function saveProducts() {
+  localStorage.setItem('abarrotes_products', JSON.stringify(products));
+}
+
+let sales = JSON.parse(localStorage.getItem('abarrotes_sales') || '[]');
+
+function saveSales() {
+  localStorage.setItem('abarrotes_sales', JSON.stringify(sales));
+}
+
+// ==================== INICIALIZACIÓN ====================
+document.addEventListener('DOMContentLoaded', () => {
+  renderProducts(products);
+  setupEventListeners();
+  setupAmountGivenListener();
+});
+
+function renderProducts(productList) {
+  els.productsGrid.innerHTML = '';
+  if (productList.length === 0) {
+    els.productsGrid.innerHTML = '<div class="empty-cart">No hay productos</div>';
+    return;
+  }
+  productList.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'product-card';
+    card.innerHTML = `
+      ${p.photo_url ? `<img src="${p.photo_url}" alt="${p.name}">` : '<div class="no-image"></div>'}
+      <div class="product-name">${escapeHtml(p.name)}</div>
+      <div class="product-price">$${parseFloat(p.price).toFixed(2)}</div>
+      <div class="product-stock ${parseInt(p.stock) <= 5 ? 'low' : ''}">Stock: ${p.stock}</div>
+    `;
+    card.addEventListener('click', () => addToCart(p));
+    els.productsGrid.appendChild(card);
+  });
+}
+
+// ==================== BÚSQUEDA ====================
+els.searchInput.addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  if (q.length < 1) {
+    renderProducts(products);
+    return;
+  }
+  const filtered = products.filter(p =>
+    p.name.toLowerCase().includes(q) ||
+    p.barcode.toLowerCase().includes(q)
+  );
+  renderProducts(filtered);
+});
+
+// ==================== CARRITO ====================
+function addToCart(product) {
+  const existing = cart.find(item => item.productId === product.id);
+  if (existing) {
+    existing.quantity += 1;
+    existing.total = existing.quantity * existing.unitPrice;
+  } else {
+    cart.push({
+      productId: product.id,
+      name: product.name,
+      unitPrice: parseFloat(product.price),
+      quantity: 1,
+      total: parseFloat(product.price),
+    });
+  }
+  updateCart();
+}
+
+function updateQuantity(productId, delta) {
+  const item = cart.find(i => i.productId === productId);
+  if (!item) return;
+  item.quantity += delta;
+  item.total = item.quantity * item.unitPrice;
+  if (item.quantity <= 0) {
+    cart = cart.filter(i => i.productId !== productId);
+  }
+  updateCart();
+}
+
+function removeItem(productId) {
+  cart = cart.filter(i => i.productId !== productId);
+  updateCart();
+}
+
+function updateCart() {
+  const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
+  const tax = subtotal * 0.16;
+  const total = subtotal + tax;
+
+  els.summarySubtotal.textContent = `$${subtotal.toFixed(2)}`;
+  els.summaryTax.textContent = `$${tax.toFixed(2)}`;
+  els.summaryTotal.textContent = `$${total.toFixed(2)}`;
+
+  els.cartItems.innerHTML = '';
+  if (cart.length === 0) {
+    els.emptyCart.style.display = 'flex';
+    els.btnCompleteSale.disabled = true;
+  } else {
+    els.emptyCart.style.display = 'none';
+    els.btnCompleteSale.disabled = false;
+    cart.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'cart-item';
+      const product = products.find(p => p.id === item.productId);
+      div.innerHTML = `
+        ${product && product.photo_url ? `<img src="${product.photo_url}" alt="${escapeHtml(item.name)}">` : '<div style="width:50px;height:50px;background:#e2e8f0;border-radius:8px;"></div>'}
+        <div class="cart-item-info">
+          <div class="cart-item-name">${escapeHtml(item.name)}</div>
+          <div class="cart-item-price">$${item.unitPrice.toFixed(2)} c/u</div>
+        </div>
+        <div class="cart-item-controls">
+          <button class="btn-qty" onclick="updateQuantity('${item.productId}', -1)">−</button>
+          <span style="font-weight:600">${item.quantity}</span>
+          <button class="btn-qty" onclick="updateQuantity('${item.productId}', 1)">+</button>
+          <button class="btn-remove-item" onclick="removeItem('${item.productId}')">×</button>
+        </div>
+      `;
+      els.cartItems.appendChild(div);
+    });
+  }
+
+  calculateChange();
+}
+
+function setupAmountGivenListener() {
+  els.amountGiven.addEventListener('input', calculateChange);
+}
+
+function calculateChange() {
+  const given = parseFloat(els.amountGiven.value) || 0;
+  const total = cart.reduce((sum, item) => sum + item.total, 0) * 1.16;
+  const change = given - total;
+  els.changeDisplay.textContent = change >= 0 ? `$${change.toFixed(2)}` : `$0.00`;
+  els.changeDisplay.style.color = change >= 0 ? '#10b981' : '#ef4444';
+}
+
+// ==================== CÁMARA ====================
+els.btnCamera.addEventListener('click', async () => {
+  await openCamera();
+});
+
+els.btnCloseCamera.addEventListener('click', closeCamera);
+els.modalOverlay.addEventListener('click', closeCamera);
+
+async function openCamera() {
+  try {
+    els.modalOverlay.style.display = 'block';
+    els.cameraModal.style.display = 'flex';
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' },
+    });
+    els.cameraVideo.srcObject = stream;
+    els.cameraError.textContent = '';
+    // Guardar referencia para cerrar después
+    els.cameraModal.dataset.stream = 'active';
+  } catch (err) {
+    console.error('Error cámara:', err);
+    els.cameraError.textContent = 'No se pudo acceder a la cámara. Permite el acceso en el navegador.';
+    closeCamera();
+  }
+}
+
+function closeCamera() {
+  const stream = els.cameraVideo.srcObject;
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+  }
+  els.cameraVideo.srcObject = null;
+  els.modalOverlay.style.display = 'none';
+  els.cameraModal.style.display = 'none';
+  els.cameraResult.innerHTML = '';
+  delete els.cameraModal.dataset.stream;
+}
+
+els.btnCapture.addEventListener('click', captureFrame);
+
+function captureFrame() {
+  const video = els.cameraVideo;
+  const canvas = els.cameraCanvas;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+  els.cameraResult.innerHTML = `
+    <div style="text-align:center; padding:1rem;">
+      <img src="${imageData}" style="max-width:200px; border-radius:8px; margin-bottom:0.5rem;">
+      <p style="color:#64748b; font-size:0.875rem;">Foto capturada</p>
+      <button class="btn-primary" style="margin-top:0.5rem; padding:0.5rem 1rem; font-size:0.875rem;" onclick="closeCamera()">Usar esta foto</button>
+    </div>
+  `;
+}
+
+// Guardar foto tomada como producto (simplificado - usa la foto como imagen del producto)
+window.usarFotoCapturada = function() {
+  const imgData = els.cameraCanvas.toDataURL('image/jpeg', 0.8);
+  // Si hay un producto en edición, asignarle la foto
+  const editingId = els.modalProducts.dataset.editingId;
+  if (editingId) {
+    const p = products.find(p => p.id === editingId);
+    if (p) {
+      p.photo_url = imgData;
+      saveProducts();
+      loadExistingProducts();
+      renderProducts(products);
+      alert('Foto guardada en el producto');
+    }
+  }
+  closeCamera();
+};
+
+// ==================== PRODUCTO ENCONTRADO ====================
+els.btnAddFound.addEventListener('click', () => {
+  if (currentProductFound) {
+    addToCart(currentProductFound);
+    closeProductFound();
+  }
+});
+
+els.btnCloseFound.addEventListener('click', closeProductFound);
+
+function showProductFound(product) {
+  currentProductFound = product;
+  els.productFoundName.textContent = product.name;
+  els.productFoundBarcode.textContent = product.barcode ? `Código: ${product.barcode}` : '';
+  els.productFoundPrice.textContent = `$${parseFloat(product.price).toFixed(2)}`;
+  els.productFoundImg.src = product.photo_url || '';
+  els.productFoundImg.style.display = product.photo_url ? 'block' : 'none';
+  els.productFound.classList.remove('hidden');
+}
+
+function closeProductFound() {
+  currentProductFound = null;
+  els.productFound.classList.add('hidden');
+}
+
+// ==================== VENTA ====================
+els.btnCompleteSale.addEventListener('click', () => {
+  if (cart.length === 0) return;
+
+  const given = parseFloat(els.amountGiven.value) || 0;
+  const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
+  const tax = subtotal * 0.16;
+  const total = subtotal + tax;
+  const change = given - total;
+
+  if (change < 0) {
+    alert('El monto recibido es insuficiente');
+    return;
+  }
+
+  const sale = {
+    id: Date.now().toString(),
+    subtotal,
+    tax,
+    total,
+    amount_given: given,
+    change,
+    payment_method: 'efectivo',
+    notes: '',
+    created_at: new Date().toISOString(),
+    items: cart.map(item => ({
+      product_id: item.productId,
+      product_name: item.name,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      total_price: item.total,
+    })),
+  };
+
+  // Descontar stock
+  for (const item of cart) {
+    const p = products.find(prod => prod.id === item.productId);
+    if (p) {
+      p.stock = Math.max(0, p.stock - item.quantity);
+    }
+  }
+
+  saveProducts();
+  sales.unshift(sale);
+  saveSales();
+
+  els.btnPrintTicket.style.display = 'block';
+  alert(`Venta completada.\nTotal: $${total.toFixed(2)}\nCambio: $${change.toFixed(2)}`);
+  cart = [];
+  els.amountGiven.value = '';
+  updateCart();
+  renderProducts(products);
+});
+
+els.btnClearCart.addEventListener('click', () => {
+  cart = [];
+  els.amountGiven.value = '';
+  updateCart();
+});
+
+// ==================== MENÚ LATERAL ====================
+els.btnMenu.addEventListener('click', () => {
+  els.sidebarMenu.style.display = 'flex';
+});
+els.btnCloseMenu.addEventListener('click', () => {
+  els.sidebarMenu.style.display = 'none';
+});
+
+// ==================== GESTIONAR PRODUCTOS ====================
+els.btnManageProducts.addEventListener('click', () => {
+  els.sidebarMenu.style.display = 'none';
+  els.modalProductsOverlay.style.display = 'block';
+  els.modalProducts.style.display = 'flex';
+  delete els.modalProducts.dataset.editingId;
+  limpiarFormularioProducto();
+  loadExistingProducts();
+});
+
+els.btnCloseProducts.addEventListener('click', () => {
+  els.modalProductsOverlay.style.display = 'none';
+  els.modalProducts.style.display = 'none';
+});
+els.modalProductsOverlay.addEventListener('click', () => {
+  els.modalProductsOverlay.style.display = 'none';
+  els.modalProducts.style.display = 'none';
+});
+
+function limpiarFormularioProducto() {
+  els.prodName.value = '';
+  els.prodPrice.value = '';
+  els.prodCategory.value = '';
+  els.prodBarcode.value = '';
+  els.prodStock.value = '';
+  els.prodPhoto.value = '';
+}
+
+async function loadExistingProducts() {
+  els.existingProducts.innerHTML = '';
+  products.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'product-list-item';
+    div.innerHTML = `
+      ${p.photo_url ? `<img src="${p.photo_url}" alt="" style="max-height:40px;">` : '<div style="width:40px;height:40px;background:#e2e8f0;border-radius:6px;"></div>'}
+      <div class="product-list-item-info">
+        <div class="product-list-item-name">${escapeHtml(p.name)}</div>
+        <div class="product-list-item-price">$${parseFloat(p.price).toFixed(2)}</div>
+      </div>
+      <div style="display:flex; gap:0.25rem;">
+        <button class="btn-delete-product" onclick="editarProducto('${p.id}')" title="Editar">✏️</button>
+        <button class="btn-delete-product" onclick="eliminarProducto('${p.id}')" title="Eliminar">×</button>
+      </div>
+    `;
+    els.existingProducts.appendChild(div);
+  });
+}
+
+els.btnSaveProduct.addEventListener('click', () => {
+  const name = els.prodName.value.trim();
+  const price = parseFloat(els.prodPrice.value);
+  const category = els.prodCategory.value.trim();
+  const barcode = els.prodBarcode.value.trim();
+  const stock = parseInt(els.prodStock.value) || 0;
+
+  if (!name || !price) {
+    alert('Nombre y precio son requeridos');
+    return;
+  }
+
+  const editingId = els.modalProducts.dataset.editingId;
+  let photo_url = '';
+
+  // Si hay foto seleccionada, convertir a base64
+  if (els.prodPhoto.files[0]) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      photo_url = e.target.result;
+      guardarProducto(name, price, category, barcode, stock, photo_url, editingId);
+    };
+    reader.readAsDataURL(els.prodPhoto.files[0]);
+  } else if (editingId) {
+    const existente = products.find(p => p.id === editingId);
+    photo_url = existente ? existente.photo_url : '';
+    guardarProducto(name, price, category, barcode, stock, photo_url, editingId);
+  } else {
+    guardarProducto(name, price, category, barcode, stock, photo_url, editingId);
+  }
+});
+
+function guardarProducto(name, price, category, barcode, stock, photo_url, editingId) {
+  if (editingId) {
+    const idx = products.findIndex(p => p.id === editingId);
+    if (idx >= 0) {
+      products[idx] = { ...products[idx], name, price, category, barcode, stock, photo_url, updated_at: new Date().toISOString() };
+    }
+  } else {
+    const nuevo = {
+      id: Date.now().toString(),
+      name, price, category, barcode, stock, photo_url,
+      created_at: new Date().toISOString(),
+    };
+    products.push(nuevo);
+  }
+  saveProducts();
+  limpiarFormularioProducto();
+  delete els.modalProducts.dataset.editingId;
+  loadExistingProducts();
+  renderProducts(products);
+}
+
+els.btnCancelProduct.addEventListener('click', () => {
+  limpiarFormularioProducto();
+  delete els.modalProducts.dataset.editingId;
+});
+
+window.editarProducto = (id) => {
+  const p = products.find(prod => prod.id === id);
+  if (!p) return;
+  els.modalProducts.dataset.editingId = id;
+  els.prodName.value = p.name;
+  els.prodPrice.value = p.price;
+  els.prodCategory.value = p.category;
+  els.prodBarcode.value = p.barcode;
+  els.prodStock.value = p.stock;
+  els.modalProductsOverlay.style.display = 'block';
+  els.modalProducts.style.display = 'flex';
+};
+
+window.eliminarProducto = (id) => {
+  if (!confirm('¿Eliminar este producto?')) return;
+  products = products.filter(p => p.id !== id);
+  saveProducts();
+  loadExistingProducts();
+  renderProducts(products);
+};
+
+// ==================== HISTORIAL DE VENTAS ====================
+els.btnViewSales.addEventListener('click', () => {
+  els.sidebarMenu.style.display = 'none';
+  els.modalSalesOverlay.style.display = 'block';
+  els.modalSales.style.display = 'flex';
+  loadSales();
+});
+
+els.btnCloseSales.addEventListener('click', () => {
+  els.modalSalesOverlay.style.display = 'none';
+  els.modalSales.style.display = 'none';
+});
+els.modalSalesOverlay.addEventListener('click', () => {
+  els.modalSalesOverlay.style.display = 'none';
+  els.modalSales.style.display = 'none';
+});
+
+function loadSales() {
+  els.salesTableBody.innerHTML = '';
+  sales.forEach(s => {
+    const itemCount = s.items.reduce((sum, it) => sum + it.quantity, 0);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${new Date(s.created_at).toLocaleString('es-MX')}</td>
+      <td>${itemCount} productos</td>
+      <td>$${parseFloat(s.total).toFixed(2)}</td>
+      <td>$${parseFloat(s.amount_given).toFixed(2)}</td>
+      <td>$${parseFloat(s.change).toFixed(2)}</td>
+    `;
+    els.salesTableBody.appendChild(tr);
+  });
+}
+
+// ==================== EXPORTAR CSV ====================
+els.btnExportCsv.addEventListener('click', () => {
+  if (sales.length === 0) {
+    alert('No hay ventas para exportar');
+    return;
+  }
+  let csv = 'Fecha,Productos,Total,Recibido,Cambio\n';
+  sales.forEach(s => {
+    const fecha = new Date(s.created_at).toLocaleString('es-MX');
+    const items = s.items.reduce((sum, it) => sum + it.quantity, 0);
+    csv += `"${fecha}",${items},${s.total.toFixed(2)},${s.amount_given.toFixed(2)},${s.change.toFixed(2)}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'ventas-abarrotes.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ==================== IMPORTAR OPEN FOOD FACTS ====================
+els.btnImportOpenFood.addEventListener('click', () => {
+  const barcode = prompt('Ingresa el código de barras del producto:');
+  if (!barcode) return;
+  fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 1 && data.product) {
+        const p = data.product;
+        els.prodName.value = p.product_name || p.product_name_es || 'Producto sin nombre';
+        els.prodCategory.value = p.categories || '';
+        els.prodBarcode.value = barcode;
+        els.modalProductsOverlay.style.display = 'block';
+        els.modalProducts.style.display = 'flex';
+        alert('Producto encontrado en Open Food Facts. Completa el precio y guarda.');
+      } else {
+        alert('Producto no encontrado en Open Food Facts');
+      }
+    })
+    .catch(() => alert('Error consultando Open Food Facts'));
+});
+
+// ==================== UTILIDADES ====================
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeProductFound();
+    els.sidebarMenu.style.display = 'none';
+    els.modalProductsOverlay.style.display = 'none';
+    els.modalProducts.style.display = 'none';
+    els.modalSalesOverlay.style.display = 'none';
+    els.modalSales.style.display = 'none';
+  }
+});

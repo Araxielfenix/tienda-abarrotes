@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tienda de Abarrotes - Punto de Venta</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+
+  <!-- ==================== HEADER ==================== -->
+  <header class="app-header">
+    <div class="header-content">
+      <div class="logo">🛒 Abarrotes</div>
+      <div class="header-actions">
+        <button class="btn-icon" id="btn-menu" aria-label="Menú">☰</button>
+        <button class="btn-icon" id="btn-camera" aria-label="Cámara">📷</button>
+        <button class="btn-icon" id="btn-products" aria-label="Productos">📦</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== PANEL IZQUIERDO: CARRITO ==================== -->
+  <div class="app-container">
+    <aside class="cart-panel" id="cart-panel">
+      <div class="panel-header">
+        <h2>Ticket</h2>
+        <button class="btn-clear" id="btn-clear-cart">Vaciar</button>
+      </div>
+
+      <div class="cart-items" id="cart-items">
+        <!-- Los productos se agregan aquí dinámicamente -->
+        <div class="empty-cart">Tu carrito está vacío</div>
+      </div>
+
+      <div class="cart-summary">
+        <div class="summary-row">
+          <span>Subtotal:</span>
+          <span id="summary-subtotal">$0.00</span>
+        </div>
+        <div class="summary-row">
+          <span>IVA (16%):</span>
+          <span id="summary-tax">$0.00</span>
+        </div>
+        <div class="summary-row total">
+          <span>TOTAL:</span>
+          <span id="summary-total">$0.00</span>
+        </div>
+      </div>
+
+      <div class="payment-section">
+        <label for="amount-given">Recibido:</label>
+        <input type="number" id="amount-given" placeholder="0.00" step="0.01" min="0">
+        <div class="change-display">
+          <span>Cambio:</span>
+          <span id="change-display">$0.00</span>
+        </div>
+      </div>
+
+      <div class="cart-actions">
+        <button class="btn-primary btn-full" id="btn-complete-sale">Cobrar Venta</button>
+        <button class="btn-secondary btn-full" id="btn-print-ticket" style="display:none;">Imprimir Ticket</button>
+      </div>
+    </aside>
+
+    <!-- ==================== PANEL CENTRAL: PRODUCTOS ==================== -->
+    <main class="products-panel">
+      <!-- Búsqueda -->
+      <div class="search-bar">
+        <input type="text" id="search-input" placeholder="Buscar producto o código de barras...">
+        <button class="btn-icon" id="btn-scan">🔍</button>
+      </div>
+
+      <!-- Cámara modal (oculta por defecto) -->
+      <div class="camera-modal" id="camera-modal">
+        <div class="camera-header">
+          <h3>Escanea o toma foto</h3>
+          <button class="btn-close" id="btn-close-camera">✕</button>
+        </div>
+        <div class="camera-container">
+          <video id="camera-video" autoplay playsinline></video>
+          <canvas id="camera-canvas"></canvas>
+          <div class="camera-controls">
+            <button class="btn-camera-capture" id="btn-capture">Tomar foto</button>
+            <button class="btn-camera-switch" id="btn-switch-camera">Cambiar cámara</button>
+          </div>
+          <div id="camera-error" class="camera-error"></div>
+        </div>
+        <div class="camera-result" id="camera-result"></div>
+      </div>
+
+      <!-- Overlay oscuro para cámara -->
+      <div class="modal-overlay" id="modal-overlay"></div>
+
+      <!-- Mensaje de producto encontrado -->
+      <div id="product-found" class="product-found-card hidden">
+        <div class="product-found-content">
+          <img id="product-found-img" src="" alt="Producto">
+          <div class="product-found-info">
+            <h3 id="product-found-name"></h3>
+            <p id="product-found-barcode"></p>
+            <div class="product-found-price" id="product-found-price"></div>
+          </div>
+          <button class="btn-add-found" id="btn-add-found">Agregar al carrito</button>
+          <button class="btn-close-found" id="btn-close-found">Cerrar</button>
+        </div>
+      </div>
+
+      <!-- Lista de productos -->
+      <div class="products-grid" id="products-grid">
+        <!-- Productos se cargan aquí -->
+      </div>
+
+      <div class="pagination" id="pagination"></div>
+    </main>
+  </div>
+
+  <!-- ==================== MENÚ DESPLEGABLE ==================== -->
+  <div class="sidebar-menu hidden" id="sidebar-menu">
+    <div class="menu-header">
+      <h3>Menú</h3>
+      <button class="btn-close" id="btn-close-menu">✕</button>
+    </div>
+    <ul class="menu-items">
+      <li><button class="menu-item" onclick="location.reload()"><span>🏠</span> Nueva Venta</button></li>
+      <li><button class="menu-item" id="btn-manage-products"><span>📦</span> Gestionar Productos</button></li>
+      <li><button class="menu-item" id="btn-view-sales"><span>📊</span> Historial de Ventas</button></li>
+      <li><button class="menu-item" id="btn-import-openfood"><span>🌐</span> Importar Open Food Facts</button></li>
+      <li><button class="menu-item" id="btn-export-csv"><span>📥</span> Exportar Ventas CSV</button></li>
+    </ul>
+  </div>
+
+  <!-- ==================== MODAL: GESTIONAR PRODUCTOS ==================== -->
+  <div class="modal-overlay" id="modal-products-overlay"></div>
+  <div class="modal" id="modal-products">
+    <div class="modal-header">
+      <h3>Gestionar Productos</h3>
+      <button class="btn-close" id="btn-close-products">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Nombre del producto</label>
+        <input type="text" id="prod-name" placeholder="Ej: Leche Lala 1L">
+      </div>
+      <div class="form-group">
+        <label>Precio (MXN)</label>
+        <input type="number" id="prod-price" step="0.01" min="0" placeholder="28.50">
+      </div>
+      <div class="form-group">
+        <label>Categoría</label>
+        <input type="text" id="prod-category" placeholder="Ej: Lácteos">
+      </div>
+      <div class="form-group">
+        <label>Código de barras</label>
+        <input type="text" id="prod-barcode" placeholder="7501010101012">
+      </div>
+      <div class="form-group">
+        <label>Stock</label>
+        <input type="number" id="prod-stock" min="0" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>Foto del producto</label>
+        <input type="file" id="prod-photo" accept="image/*">
+      </div>
+      <div class="form-actions">
+        <button class="btn-primary" id="btn-save-product">Guardar Producto</button>
+        <button class="btn-secondary" id="btn-cancel-product">Cancelar</button>
+      </div>
+      <hr>
+      <h4>Productos existentes</h4>
+      <div class="products-list" id="existing-products"></div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: HISTORIAL DE VENTAS ==================== -->
+  <div class="modal-overlay" id="modal-sales-overlay"></div>
+  <div class="modal" id="modal-sales">
+    <div class="modal-header">
+      <h3>Historial de Ventas</h3>
+      <button class="btn-close" id="btn-close-sales">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0;">
+      <div class="sales-table-container">
+        <table class="sales-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Productos</th>
+              <th>Total</th>
+              <th>Recibido</th>
+              <th>Cambio</th>
+            </tr>
+          </thead>
+          <tbody id="sales-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
