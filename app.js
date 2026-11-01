@@ -1,12 +1,15 @@
 /**
  * Tienda de Abarrotes - Punto de Venta Estático
- * Funciona 100% en el navegador con localStorage
- * Ideal para GitHub Pages (sin servidor)
+ * Funciona 100% en el navegador con localStorage + Búsqueda de precios locales
  */
 
 // Estado de la aplicación
 let cart = [];
 let currentProductFound = null;
+let priceSearchResults = [];
+
+// URL del backend en la Raspberry Pi (solo para entorno local con SerpApi)
+const API_BASE = 'http://192.168.200.32:3000';
 
 // Datos de ejemplo iniciales (se cargan solo si no hay nada en localStorage)
 const PRODUCTOS_EJEMPLO = [
@@ -40,6 +43,7 @@ const els = {
   btnClearCart: document.getElementById('btn-clear-cart'),
   btnMenu: document.getElementById('btn-menu'),
   btnCloseMenu: document.getElementById('btn-close-menu'),
+  cartPanel: document.getElementById('cart-panel'),
   sidebarMenu: document.getElementById('sidebar-menu'),
   modalOverlay: document.getElementById('modal-overlay'),
   cameraModal: document.getElementById('camera-modal'),
@@ -89,7 +93,6 @@ function loadFromStorage() {
   if (savedProducts) {
     return JSON.parse(savedProducts);
   }
-  // Guardar productos de ejemplo la primera vez
   localStorage.setItem('abarrotes_products', JSON.stringify(PRODUCTOS_EJEMPLO));
   return PRODUCTOS_EJEMPLO;
 }
@@ -127,8 +130,16 @@ function renderProducts(productList) {
       <div class="product-name">${escapeHtml(p.name)}</div>
       <div class="product-price">$${parseFloat(p.price).toFixed(2)}</div>
       <div class="product-stock ${parseInt(p.stock) <= 5 ? 'low' : ''}">Stock: ${p.stock}</div>
+      <div class="product-actions">
+        <button class="btn-add-cart" onclick="addToCart('${p.id}')" title="Agregar al carrito">+</button>
+        <button class="btn-search-price" onclick="buscarPrecioWeb('${escapeHtml(p.name)}')" title="Buscar precio en Walmart">🔍</button>
+      </div>
     `;
-    card.addEventListener('click', () => addToCart(p));
+    card.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('btn-add-cart') && !e.target.classList.contains('btn-search-price')) {
+        addToCart(p);
+      }
+    });
     els.productsGrid.appendChild(card);
   });
 }
@@ -148,8 +159,11 @@ els.searchInput.addEventListener('input', (e) => {
 });
 
 // ==================== CARRITO ====================
-function addToCart(product) {
-  const existing = cart.find(item => item.productId === product.id);
+function addToCart(productId) {
+  const product = products.find(p => p.id === productId);
+  if (!product) return;
+
+  const existing = cart.find(item => item.productId === productId);
   if (existing) {
     existing.quantity += 1;
     existing.total = existing.quantity * existing.unitPrice;
@@ -233,6 +247,157 @@ function calculateChange() {
   els.changeDisplay.style.color = change >= 0 ? '#10b981' : '#ef4444';
 }
 
+// ==================== BÚSQUEDA DE PRECIOS WEB (sin backend) ====================
+
+/**
+ * Busca precios de un producto usando la API pública de MercadoLibre México
+ * Funciona directamente desde el navegador sin necesidad de backend
+ */
+async function buscarPrecioWeb(producto) {
+  if (!producto) return;
+
+  const btn = event ? event.target : null;
+  const originalText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.textContent = '⏳';
+    btn.disabled = true;
+  }
+
+  try {
+    // Buscar en MercadoLibre México (API pública, sin autenticación)
+    const query = encodeURIComponent(producto);
+    const response = await fetch(
+      `https://api.mercadolibre.com.mx/sites/MLA/search?q=${query}&limit=10`
+    );
+
+    if (!response.ok) {
+      throw new Error('Error en la respuesta de MercadoLibre');
+    }
+
+    const data = await response.json();
+    const results = data.results || [];
+
+    if (results.length === 0) {
+      if (btn) {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+      alert('No se encontraron productos para: ' + producto);
+      return;
+    }
+
+    // Transformar resultados al formato de mostrarResultadosPrecio
+    const transformed = {
+      organic_results: results.map(item => ({
+        title: item.title,
+        price: item.price ? `$${item.price.toFixed(2)}` : 'Consultar',
+        link: item.permalink,
+        snippet: item.sold_quantity ? `Ventas: ${item.sold_quantity}` : '',
+      })),
+      shopping_results: [],
+      total_results: data.results.length,
+    };
+
+    if (btn) {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+
+    priceSearchResults = transformed;
+    mostrarResultadosPrecio(transformed, producto);
+
+  } catch (err) {
+    console.error('Error buscando precios:', err);
+    if (btn) {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+    alert('No se pudieron obtener precios en este momento. Intenta de nuevo.');
+  }
+}
+
+function mostrarResultadosPrecio(data, producto) {
+  const organic = data.organic_results || [];
+  const shopping = data.shopping_results || [];
+
+  let html = `
+    <div class="price-results-header">
+      <h3>🔍 Precios para: <strong>${escapeHtml(producto)}</strong></h3>
+      <p>Resultados en Walmart México (vía Google)</p>
+      <div class="price-results-stats">
+        <span>Total resultados: ${data.total_results || 0}</span>
+      </div>
+    </div>
+  `;
+
+  if (shopping.length > 0) {
+    html += `<div class="price-section"><h4>🛒 Productos destacados</h4><div class="price-grid">`;
+    shopping.forEach((item, idx) => {
+      html += `
+        <div class="price-card">
+          <div class="price-card-title">${escapeHtml(item.title)}</div>
+          ${item.price ? `<div class="price-card-price">${item.price}</div>` : '<div class="price-card-price">Precio no disponible</div>'}
+          ${item.thumbnail ? `<img src="${item.thumbnail}" alt="${escapeHtml(item.title)}" class="price-card-img">` : ''}
+          ${item.link ? `<a href="${item.link}" target="_blank" class="price-card-link">Ver en Walmart →</a>` : ''}
+        </div>
+      `;
+    });
+    html += `</div></div>`;
+  }
+
+  if (organic.length > 0) {
+    html += `<div class="price-section"><h4>📋 Otros resultados</h4><div class="price-list">`;
+    organic.slice(0, 5).forEach((item) => {
+      html += `
+        <div class="price-item">
+          <div class="price-item-title">${escapeHtml(item.title)}</div>
+          ${item.price ? `<div class="price-item-price">${item.price}</div>` : ''}
+          ${item.snippet ? `<div class="price-item-snippet">${escapeHtml(item.snippet)}</div>` : ''}
+          ${item.link ? `<a href="${item.link}" target="_blank" class="price-item-link">Ver enlace →</a>` : ''}
+        </div>
+      `;
+    });
+    html += `</div></div>`;
+  }
+
+  if (organic.length === 0 && shopping.length === 0) {
+    html += `<div class="price-empty">No se encontraron precios para este producto en Walmart México.</div>`;
+  }
+
+  // Mostrar en modal o panel temporal
+  const existing = document.getElementById('price-results-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'price-results-modal';
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-header">
+      <h3>Precios Web</h3>
+      <button class="btn-close" onclick="cerrarPrecioModal()">✕</button>
+    </div>
+    <div class="modal-body" style="max-height: 500px; overflow-y: auto;">
+      ${html}
+    </div>
+    <div style="padding: 1rem;">
+      <button class="btn-secondary btn-full" onclick="cerrarPrecioModal()">Cerrar</button>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  modal.style.display = 'flex';
+}
+
+window.cerrarPrecioModal = function() {
+  const modal = document.getElementById('price-results-modal');
+  if (modal) {
+    modal.remove();
+  }
+};
+
+// Exponer para uso en HTML
+window.buscarPrecioWeb = buscarPrecioWeb;
+
 // ==================== CÁMARA ====================
 els.btnCamera.addEventListener('click', async () => {
   await openCamera();
@@ -250,7 +415,6 @@ async function openCamera() {
     });
     els.cameraVideo.srcObject = stream;
     els.cameraError.textContent = '';
-    // Guardar referencia para cerrar después
     els.cameraModal.dataset.stream = 'active';
   } catch (err) {
     console.error('Error cámara:', err);
@@ -286,15 +450,13 @@ function captureFrame() {
     <div style="text-align:center; padding:1rem;">
       <img src="${imageData}" style="max-width:200px; border-radius:8px; margin-bottom:0.5rem;">
       <p style="color:#64748b; font-size:0.875rem;">Foto capturada</p>
-      <button class="btn-primary" style="margin-top:0.5rem; padding:0.5rem 1rem; font-size:0.875rem;" onclick="closeCamera()">Usar esta foto</button>
+      <button class="btn-primary" style="margin-top:0.5rem; padding:0.5rem 1rem; font-size:0.875rem;" onclick="usarFotoCapturada()">Usar esta foto</button>
     </div>
   `;
 }
 
-// Guardar foto tomada como producto (simplificado - usa la foto como imagen del producto)
 window.usarFotoCapturada = function() {
   const imgData = els.cameraCanvas.toDataURL('image/jpeg', 0.8);
-  // Si hay un producto en edición, asignarle la foto
   const editingId = els.modalProducts.dataset.editingId;
   if (editingId) {
     const p = products.find(p => p.id === editingId);
@@ -312,7 +474,7 @@ window.usarFotoCapturada = function() {
 // ==================== PRODUCTO ENCONTRADO ====================
 els.btnAddFound.addEventListener('click', () => {
   if (currentProductFound) {
-    addToCart(currentProductFound);
+    addToCart(currentProductFound.id);
     closeProductFound();
   }
 });
@@ -368,7 +530,6 @@ els.btnCompleteSale.addEventListener('click', () => {
     })),
   };
 
-  // Descontar stock
   for (const item of cart) {
     const p = products.find(prod => prod.id === item.productId);
     if (p) {
@@ -465,7 +626,6 @@ els.btnSaveProduct.addEventListener('click', () => {
   const editingId = els.modalProducts.dataset.editingId;
   let photo_url = '';
 
-  // Si hay foto seleccionada, convertir a base64
   if (els.prodPhoto.files[0]) {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -612,13 +772,79 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// ==================== BARRA NAVEGACIÓN INFERIOR (móvil) ====================
+const bottomNavItems = document.querySelectorAll('.bottom-nav-item');
+const fabCart = document.getElementById('fab-cart');
+const fabBadge = document.getElementById('fab-badge');
+
+function updateFabBadge() {
+  const count = cart.reduce((sum, item) => sum + item.quantity, 0);
+  if (count > 0) {
+    fabBadge.textContent = count;
+    fabBadge.style.display = 'flex';
+    fabCart.classList.add('visible');
+  } else {
+    fabBadge.style.display = 'none';
+    fabCart.classList.remove('visible');
+  }
+}
+
+bottomNavItems.forEach(item => {
+  item.addEventListener('click', () => {
+    const action = item.dataset.action;
+
+    // Quitar active de todos
+    bottomNavItems.forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+
+    switch (action) {
+      case 'cart':
+        toggleCartPanel();
+        break;
+      case 'scan':
+        els.btnCamera.click();
+        break;
+      case 'products':
+        els.btnManageProducts.click();
+        break;
+      case 'menu':
+        els.btnMenu.click();
+        break;
+    }
+  });
+});
+
+fabCart.addEventListener('click', () => {
+  toggleCartPanel();
+});
+
+function toggleCartPanel() {
+  els.cartPanel.classList.toggle('open');
+  // Cerrar barra inferior al abrir el carrito
+  if (els.cartPanel.classList.contains('open')) {
+    bottomNavItems.forEach(i => i.classList.remove('active'));
+  }
+}
+
+// Actualizar badge del FAB cuando cambia el carrito
+const originalUpdateCart = updateCart;
+updateCart = function() {
+  originalUpdateCart();
+  updateFabBadge();
+};
+
+// Actualizar badge al iniciar
+updateFabBadge();
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeProductFound();
+    cerrarPrecioModal();
     els.sidebarMenu.style.display = 'none';
     els.modalProductsOverlay.style.display = 'none';
     els.modalProducts.style.display = 'none';
     els.modalSalesOverlay.style.display = 'none';
     els.modalSales.style.display = 'none';
+    els.cartPanel.classList.remove('open');
   }
 });

@@ -202,5 +202,31 @@
   </div>
 
   <script src="app.js"></script>
+
+  <!-- ==================== BARRA NAVEGACIÓN INFERIOR (móvil) ==================== -->
+  <nav class="bottom-nav" id="bottom-nav">
+    <button class="bottom-nav-item" data-action="cart">
+      <span class="nav-icon">🛒</span>
+      <span>Carrito</span>
+    </button>
+    <button class="bottom-nav-item" data-action="scan">
+      <span class="nav-icon">📷</span>
+      <span>Escanear</span>
+    </button>
+    <button class="bottom-nav-item" data-action="products">
+      <span class="nav-icon">📦</span>
+      <span>productos</span>
+    </button>
+    <button class="bottom-nav-item" data-action="menu">
+      <span class="nav-icon">☰</span>
+      <span>Menú</span>
+    </button>
+  </nav>
+
+  <!-- Botón flotante del carrito -->
+  <button class="fab" id="fab-cart" aria-label="Ver carrito">
+    🛒
+    <span class="badge" id="fab-badge" style="display:none;">0</span>
+  </button>
 </body>
 </html>
