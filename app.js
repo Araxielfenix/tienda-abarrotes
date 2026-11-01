@@ -8,9 +8,6 @@ let cart = [];
 let currentProductFound = null;
 let priceSearchResults = [];
 
-// URL del backend en la Raspberry Pi (solo para entorno local con SerpApi)
-const API_BASE = 'http://192.168.200.32:3000';
-
 // Datos de ejemplo iniciales (se cargan solo si no hay nada en localStorage)
 const PRODUCTOS_EJEMPLO = [
   { id: 'p1', name: 'Leche Lala 1L', price: 28.50, category: 'Lácteos', barcode: '7501010101012', stock: 50, photo_url: '' },

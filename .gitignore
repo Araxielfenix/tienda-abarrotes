@@ -1,8 +1,6 @@
-# Dependencias
-node_modules/
-
 # Entornos
 .env
+.env.example
 *.log
 
 # Base de datos y datos de usuario (se crean al ejecutar)
@@ -10,8 +8,14 @@ products.json
 sales.json
 store.db
 
+# Dependencias
+node_modules/
+package-lock.json
+package.json
+
 # Uploads de fotos de productos (usuario-specifico)
 public/uploads/
+uploads/
 
 # IDE
 .idea/
