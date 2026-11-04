@@ -99,6 +99,52 @@ function calculateChange() {
   els.change.style.color = change >= 0 ? '#10b981' : '#ef4444';
 }
 
+// ==================== EVENT LISTENERS ====================
+function setupEventListeners() {
+  // Scan button
+  elements.btnScan.addEventListener('click', openCamera);
+  
+  // Camera controls
+  elements.btnCloseCamera.addEventListener('click', closeCamera);
+  elements.cameraOverlay.addEventListener('click', closeCamera);
+  elements.btnSwitch.addEventListener('click', switchCamera);
+  elements.btnCapture.addEventListener('click', captureAndScan);
+  
+  // Product modal
+  elements.btnAddProduct.addEventListener('click', addToTicket);
+  elements.btnCancelProduct.addEventListener('click', closeProductModal);
+  elements.productOverlay.addEventListener('click', closeProductModal);
+  elements.productPrice.addEventListener('keydown', e => {
+    if (e.key === 'Enter') addToTicket();
+  });
+  
+  // Search modal
+  elements.btnCloseSearch.addEventListener('click', closeSearchModal);
+  elements.searchOverlay.addEventListener('click', closeSearchModal);
+  
+  // Payment
+  elements.received.addEventListener('input', calculateChange);
+  elements.btnCharge.addEventListener('click', completeSale);
+  
+  // Clear
+  elements.btnClear.addEventListener('click', () => {
+    if (ticket.length > 0 && confirm('¿Limpiar ticket?')) {
+      ticket = [];
+      updateTicket();
+      toast('Ticket limpiado');
+    }
+  });
+  
+  // Escape key
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeCamera();
+      closeProductModal();
+      closeSearchModal();
+    }
+  });
+}
+
 // ==================== CÁMARA ====================
 
 async function openCamera() {
@@ -322,6 +368,52 @@ function calculateChange() {
   const change = given - total;
   elements.change.textContent = change >= 0 ? `$${change.toFixed(2)}` : `$0.00`;
   els.change.style.color = change >= 0 ? '#10b981' : '#ef4444';
+}
+
+// ==================== EVENT LISTENERS ====================
+function setupEventListeners() {
+  // Scan button
+  elements.btnScan.addEventListener('click', openCamera);
+  
+  // Camera controls
+  elements.btnCloseCamera.addEventListener('click', closeCamera);
+  elements.cameraOverlay.addEventListener('click', closeCamera);
+  elements.btnSwitch.addEventListener('click', switchCamera);
+  elements.btnCapture.addEventListener('click', captureAndScan);
+  
+  // Product modal
+  elements.btnAddProduct.addEventListener('click', addToTicket);
+  elements.btnCancelProduct.addEventListener('click', closeProductModal);
+  elements.productOverlay.addEventListener('click', closeProductModal);
+  elements.productPrice.addEventListener('keydown', e => {
+    if (e.key === 'Enter') addToTicket();
+  });
+  
+  // Search modal
+  elements.btnCloseSearch.addEventListener('click', closeSearchModal);
+  elements.searchOverlay.addEventListener('click', closeSearchModal);
+  
+  // Payment
+  elements.received.addEventListener('input', calculateChange);
+  elements.btnCharge.addEventListener('click', completeSale);
+  
+  // Clear
+  elements.btnClear.addEventListener('click', () => {
+    if (ticket.length > 0 && confirm('¿Limpiar ticket?')) {
+      ticket = [];
+      updateTicket();
+      toast('Ticket limpiado');
+    }
+  });
+  
+  // Escape key
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeCamera();
+      closeProductModal();
+      closeSearchModal();
+    }
+  });
 }
 
 // ==================== CÁMARA ====================
@@ -917,3 +1009,9 @@ function toast(message, type = '') {
   
   setTimeout(() => el.remove(), 3000);
 }
+
+// Initialize on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+  setupEventListeners();
+  updateCart();
+});
