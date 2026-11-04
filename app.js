@@ -4,17 +4,20 @@
  */
 
 // State
-let cart = [];
+let ticket = [];
+let currentProduct = null;
+let cameraStream = null;
+let scanInterval = null;
+let lastBarcode = null;
+let facingMode = 'environment';
 
 // DOM Elements
 const $ = id => document.getElementById(id);
 
-const elements = {
+const els = {
   // Ticket
   ticketItems: $('ticket-items'),
   ticketEmpty: $('ticket-empty'),
-  subtotal: $('subtotal'),
-  tax: $('tax'),
   total: $('total'),
   received: $('received'),
   change: $('change'),
@@ -52,82 +55,40 @@ const elements = {
   toastContainer: $('toast-container')
 };
 
-// ==================== TICKET ====================
-function updateCart() {
-  const total = ticket.reduce((sum, item) => sum + item.total, 0);
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  setupEventListeners();
+  updateTicket();
+});
 
-  elements.subtotal.textContent = `$${total.toFixed(2)}`;
-  elements.tax.textContent = `$0.00`;
-  elements.total.textContent = `$${total.toFixed(2)}`;
-
-  elements.cartItems.innerHTML = '';
-  if (cart.length === 0) {
-    elements.ticketEmpty.style.display = 'flex';
-    elements.btnCharge.disabled = true;
-  } else {
-    elements.ticketEmpty.style.display = 'none';
-    elements.btnCharge.disabled = false;
-    cart.forEach(item => {
-      const div = document.createElement('div');
-      div.className = 'cart-item';
-      const product = products.find(p => p.id === item.productId);
-      div.innerHTML = `
-        ${product && product.photo_url ? `<img src="${product.photo_url}" alt="${escapeHtml(item.name)}">` : '<div style="width:50px;height:50px;background:#e2e8f0;border-radius:8px;"></div>'}
-        <div class="cart-item-info">
-          <div class="cart-item-name">${escapeHtml(item.name)}</div>
-          <div class="cart-item-price">$${item.unitPrice.toFixed(2)} c/u</div>
-        </div>
-        <div class="cart-item-controls">
-          <button class="btn-qty" onclick="updateQuantity('${item.productId}', -1)">−</button>
-          <span style="font-weight:600">${item.quantity}</span>
-          <button class="btn-qty" onclick="updateQuantity('${item.productId}', 1)">+</button>
-          <button class="btn-remove-item" onclick="removeItem('${item.productId}')">×</button>
-        </div>
-      `;
-      els.ticketItems.appendChild(div);
-    });
-  }
-
-  calculateChange();
-}
-
-function calculateChange() {
-  const given = parseFloat(elements.received.value) || 0;
-  const total = ticket.reduce((sum, item) => sum + item.total, 0);
-  const change = given - total;
-  elements.change.textContent = change >= 0 ? `$${change.toFixed(2)}` : `$0.00`;
-  els.change.style.color = change >= 0 ? '#10b981' : '#ef4444';
-}
-
-// ==================== EVENT LISTENERS ====================
 function setupEventListeners() {
   // Scan button
-  elements.btnScan.addEventListener('click', openCamera);
+  els.btnScan.addEventListener('click', openCamera);
   
   // Camera controls
-  elements.btnCloseCamera.addEventListener('click', closeCamera);
-  elements.cameraOverlay.addEventListener('click', closeCamera);
-  elements.btnSwitch.addEventListener('click', switchCamera);
-  elements.btnCapture.addEventListener('click', captureAndScan);
+  els.btnCloseCamera.addEventListener('click', closeCamera);
+  els.cameraOverlay.addEventListener('click', closeCamera);
+  els.btnSwitch.addEventListener('click', switchCamera);
+  els.btnCapture.addEventListener('click', captureAndScan);
   
   // Product modal
-  elements.btnAddProduct.addEventListener('click', addToTicket);
-  elements.btnCancelProduct.addEventListener('click', closeProductModal);
-  elements.productOverlay.addEventListener('click', closeProductModal);
-  elements.productPrice.addEventListener('keydown', e => {
+  els.btnAddProduct.addEventListener('click', addToTicket);
+  els.btnCancelProduct.addEventListener('click', closeProductModal);
+  els.productOverlay.addEventListener('click', closeProductModal);
+  els.productPrice.addEventListener('keydown', e => {
     if (e.key === 'Enter') addToTicket();
   });
   
   // Search modal
-  elements.btnCloseSearch.addEventListener('click', closeSearchModal);
-  elements.searchOverlay.addEventListener('click', closeSearchModal);
+  els.btnCloseSearch.addEventListener('click', closeSearchModal);
+  els.searchOverlay.addEventListener('click', closeSearchModal);
   
   // Payment
-  elements.received.addEventListener('input', calculateChange);
-  elements.btnCharge.addEventListener('click', completeSale);
+  els.received.addEventListener('input', calculateChange);
+  els.btnCharge.addEventListener('click', completeSale);
   
   // Clear
-  elements.btnClear.addEventListener('click', () => {
+  els.btnClear.addEventListener('click', () => {
     if (ticket.length > 0 && confirm('¿Limpiar ticket?')) {
       ticket = [];
       updateTicket();
@@ -145,43 +106,186 @@ function setupEventListeners() {
   });
 }
 
-// ==================== CÁMARA ====================
+// ==================== TICKET ====================
+function updateTicket() {
+  const total = ticket.reduce((sum, item) => sum + item.total, 0);
+  
+  els.total.textContent = `$${total.toFixed(2)}`;
+  
+  els.ticketItems.innerHTML = '';
+  if (ticket.length === 0) {
+    els.ticketEmpty.style.display = 'flex';
+    els.btnCharge.disabled = true;
+  } else {
+    els.ticketEmpty.style.display = 'none';
+    els.btnCharge.disabled = false;
+    
+    ticket.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'ticket-item';
+      div.innerHTML = `
+        <div class="item-info">
+          <div class="item-name">${escapeHtml(item.name)}</div>
+          <div class="item-price">$${item.price.toFixed(2)} c/u</div>
+        </div>
+        <div class="item-controls">
+          <button class="qty-btn" onclick="updateQty('${item.id}', -1)">−</button>
+          <span class="item-qty">${item.quantity}</span>
+          <button class="qty-btn" onclick="updateQty('${item.id}', 1)">+</button>
+        </div>
+        <div class="item-total">$${item.total.toFixed(2)}</div>
+        <button class="remove-btn" onclick="removeItem('${item.id}')">×</button>
+      `;
+      els.ticketItems.appendChild(div);
+    });
+  }
+  
+  calculateChange();
+}
 
+window.updateQty = function(id, delta) {
+  const item = ticket.find(t => t.id === id);
+  if (!item) return;
+  
+  item.quantity += delta;
+  
+  if (item.quantity <= 0) {
+    removeItem(id);
+    return;
+  }
+  
+  item.total = item.quantity * item.price;
+  updateTicket();
+};
+
+window.removeItem = function(id) {
+  ticket = ticket.filter(t => t.id !== id);
+  updateTicket();
+};
+
+function calculateChange() {
+  const given = parseFloat(els.received.value) || 0;
+  const total = ticket.reduce((sum, item) => sum + item.total, 0);
+  const change = Math.max(0, given - total);
+  
+  els.change.textContent = `$${change.toFixed(2)}`;
+  els.change.style.color = given >= total ? 'var(--success)' : 'var(--danger)';
+}
+
+function completeSale() {
+  const total = ticket.reduce((sum, t) => sum + t.total, 0);
+  const received = parseFloat(els.received.value) || 0;
+  const change = received - total;
+  
+  if (received < total) {
+    toast(`Faltan $${(total - received).toFixed(2)}`, 'error');
+    return;
+  }
+  
+  alert(
+    `✅ Venta completada\n\n` +
+    `Total: $${total.toFixed(2)}\n` +
+    `Recibido: $${received.toFixed(2)}\n` +
+    `Cambio: $${change.toFixed(2)}`
+  );
+  
+  ticket = [];
+  els.received.value = '';
+  updateTicket();
+  toast('Venta completada', 'success');
+}
+
+// ==================== CÁMARA ====================
 async function openCamera() {
   try {
-    els.modalOverlay.style.display = 'block';
-    els.cameraModal.style.display = 'flex';
+    els.cameraOverlay.classList.add('visible');
+    els.cameraModal.classList.add('visible');
+    
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' },
+      video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
     });
+    
     els.cameraVideo.srcObject = stream;
-    els.cameraError.textContent = '';
-    els.cameraModal.dataset.stream = 'active';
-    // Start auto-scanning
-    startAutoScan();
+    cameraStream = stream;
+    els.cameraStatus.textContent = 'Apunta al código de barras';
+    
+    // Start auto-scanning after camera is ready
+    els.cameraVideo.onloadedmetadata = () => {
+      startAutoScan();
+    };
+    
   } catch (err) {
     console.error('Error cámara:', err);
-    els.cameraError.textContent = 'No se pudo acceder a la cámara. Permite el acceso en el navegador.';
+    toast('No se pudo acceder a la cámara. Permite el acceso.', 'error');
     closeCamera();
   }
 }
 
 function closeCamera() {
   stopAutoScan();
-  const stream = els.cameraVideo.srcObject;
-  if (stream) {
-    stream.getTracks().forEach(t => t.stop());
+  
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
   }
+  
   els.cameraVideo.srcObject = null;
-  els.modalOverlay.style.display = 'none';
-  els.cameraModal.style.display = 'none';
-  els.cameraResult.innerHTML = '';
-  delete els.cameraModal.dataset.stream;
+  els.cameraOverlay.classList.remove('visible');
+  els.cameraModal.classList.remove('visible');
+  lastBarcode = null;
+}
+
+async function switchCamera() {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  closeCamera();
+  await openCamera();
+}
+
+function startAutoScan() {
+  stopAutoScan();
+  
+  scanInterval = setInterval(async () => {
+    if (!cameraStream || els.cameraVideo.readyState !== HTMLVideoElement.HAVE_ENOUGH_DATA) return;
+    
+    const video = els.cameraVideo;
+    const canvas = els.cameraCanvas;
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+    
+    const imageData = canvas.toDataURL('image/jpeg', 0.9);
+    
+    try {
+      const result = await Tesseract.recognize(imageData, 'spa', {
+        logger: () => {}
+      });
+      
+      const text = result.data.text;
+      const barcode = extractBarcode(text);
+      
+      if (barcode && barcode !== lastBarcode) {
+        lastBarcode = barcode;
+        els.cameraStatus.textContent = `Código encontrado: ${barcode}`;
+        await lookupProduct(barcode);
+      }
+    } catch (error) {
+      // Continue scanning
+    }
+  }, 500);
+}
+
+function stopAutoScan() {
+  if (scanInterval) {
+    clearInterval(scanInterval);
+    scanInterval = null;
+  }
 }
 
 async function captureAndScan() {
-  const video = elements.cameraVideo;
-  const canvas = elements.cameraCanvas;
+  const video = els.cameraVideo;
+  const canvas = els.cameraCanvas;
   
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -220,6 +324,7 @@ async function captureAndScan() {
 }
 
 function extractBarcode(text) {
+  // Look for EAN-13, UPC-A, EAN-8 patterns
   const patterns = [
     /\b(\d{13})\b/g,
     /\b(\d{12})\b/g,
@@ -238,6 +343,7 @@ function extractBarcode(text) {
 // ==================== PRODUCT LOOKUP ====================
 async function lookupProduct(barcode) {
   stopAutoScan();
+  els.cameraStatus.textContent = 'Buscando producto...';
   
   try {
     const response = await fetch(
@@ -251,29 +357,25 @@ async function lookupProduct(barcode) {
     if (data.status === 1 && data.product) {
       const p = data.product;
       currentProduct = {
-        id: barcode,
         name: p.product_name || p.product_name_es || p.product_name_en || 'Producto',
-        price: p.price || parseFloat((Math.random() * 30 + 10).toFixed(2)),
         barcode: barcode,
-        photo_url: p.image_url || p.image_front_url || '',
-        category: p.categories || ''
+        image: p.image_url || p.image_front_url || ''
       };
       
       showProductModal();
+      
+      // Auto-search prices
+      searchPrices(currentProduct.name);
       
     } else {
-      // Product not in database - let user enter manually
       currentProduct = {
-        id: barcode,
         name: 'Producto desconocido',
-        price: 0,
         barcode: barcode,
-        photo_url: '',
-        category: ''
+        image: ''
       };
       
       showProductModal();
-      toast('Producto no encontrado en base de datos', 'warning');
+      toast('Producto no encontrado', 'warning');
     }
     
   } catch (error) {
@@ -281,12 +383,9 @@ async function lookupProduct(barcode) {
     closeCamera();
     
     currentProduct = {
-      id: barcode,
       name: 'Producto',
-      price: 0,
       barcode: barcode,
-      photo_url: '',
-      category: ''
+      image: ''
     };
     
     showProductModal();
@@ -295,16 +394,15 @@ async function lookupProduct(barcode) {
 }
 
 function showProductModal() {
-  elements.productTitle.textContent = currentProduct.name;
-  elements.productBarcode.textContent = currentProduct.barcode ? `Código: ${currentProduct.barcode}` : '';
-  elements.productPrice.value = '';
-  elements.productPrice.focus();
+  els.productTitle.textContent = currentProduct.name;
+  els.productBarcode.textContent = currentProduct.barcode ? `Código: ${currentProduct.barcode}` : '';
+  els.productPrice.value = '';
+  els.productPrice.focus();
   
-  // Show image if available
-  if (currentProduct.photo_url) {
-    elements.productPreview.innerHTML = `<img src="${currentProduct.photo_url}" alt="${currentProduct.name}">`;
+  if (currentProduct.image) {
+    els.productPreview.innerHTML = `<img src="${currentProduct.image}" alt="${currentProduct.name}">`;
   } else {
-    elements.productPreview.innerHTML = `
+    els.productPreview.innerHTML = `
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <rect x="3" y="3" width="18" height="18" rx="2"></rect>
         <circle cx="8.5" cy="8.5" r="1.5"></circle>
@@ -313,357 +411,18 @@ function showProductModal() {
     `;
   }
   
-  elements.productOverlay.classList.add('visible');
-  elements.productModal.classList.add('visible');
+  els.productOverlay.classList.add('visible');
+  els.productModal.classList.add('visible');
 }
 
 function closeProductModal() {
   currentProduct = null;
-  elements.productOverlay.classList.remove('visible');
-  elements.productModal.classList.remove('visible');
+  els.productOverlay.classList.remove('visible');
+  els.productModal.classList.remove('visible');
 }
 
-// ==================== TICKET ====================
-function updateCart() {
-  const total = ticket.reduce((sum, item) => sum + item.total, 0);
-
-  elements.subtotal.textContent = `$${total.toFixed(2)}`;
-  elements.tax.textContent = `$0.00`;
-  elements.total.textContent = `$${total.toFixed(2)}`;
-
-  elements.cartItems.innerHTML = '';
-  if (cart.length === 0) {
-    elements.ticketEmpty.style.display = 'flex';
-    elements.btnCharge.disabled = true;
-  } else {
-    elements.ticketEmpty.style.display = 'none';
-    elements.btnCharge.disabled = false;
-    cart.forEach(item => {
-      const div = document.createElement('div');
-      div.className = 'cart-item';
-      const product = products.find(p => p.id === item.productId);
-      div.innerHTML = `
-        ${product && product.photo_url ? `<img src="${product.photo_url}" alt="${escapeHtml(item.name)}">` : '<div style="width:50px;height:50px;background:#e2e8f0;border-radius:8px;"></div>'}
-        <div class="cart-item-info">
-          <div class="cart-item-name">${escapeHtml(item.name)}</div>
-          <div class="cart-item-price">$${item.unitPrice.toFixed(2)} c/u</div>
-        </div>
-        <div class="cart-item-controls">
-          <button class="btn-qty" onclick="updateQuantity('${item.productId}', -1)">−</button>
-          <span style="font-weight:600">${item.quantity}</span>
-          <button class="btn-qty" onclick="updateQuantity('${item.productId}', 1)">+</button>
-          <button class="btn-remove-item" onclick="removeItem('${item.productId}')">×</button>
-        </div>
-      `;
-      els.ticketItems.appendChild(div);
-    });
-  }
-
-  calculateChange();
-}
-
-function calculateChange() {
-  const given = parseFloat(elements.received.value) || 0;
-  const total = ticket.reduce((sum, item) => sum + item.total, 0);
-  const change = given - total;
-  elements.change.textContent = change >= 0 ? `$${change.toFixed(2)}` : `$0.00`;
-  els.change.style.color = change >= 0 ? '#10b981' : '#ef4444';
-}
-
-// ==================== EVENT LISTENERS ====================
-function setupEventListeners() {
-  // Scan button
-  elements.btnScan.addEventListener('click', openCamera);
-  
-  // Camera controls
-  elements.btnCloseCamera.addEventListener('click', closeCamera);
-  elements.cameraOverlay.addEventListener('click', closeCamera);
-  elements.btnSwitch.addEventListener('click', switchCamera);
-  elements.btnCapture.addEventListener('click', captureAndScan);
-  
-  // Product modal
-  elements.btnAddProduct.addEventListener('click', addToTicket);
-  elements.btnCancelProduct.addEventListener('click', closeProductModal);
-  elements.productOverlay.addEventListener('click', closeProductModal);
-  elements.productPrice.addEventListener('keydown', e => {
-    if (e.key === 'Enter') addToTicket();
-  });
-  
-  // Search modal
-  elements.btnCloseSearch.addEventListener('click', closeSearchModal);
-  elements.searchOverlay.addEventListener('click', closeSearchModal);
-  
-  // Payment
-  elements.received.addEventListener('input', calculateChange);
-  elements.btnCharge.addEventListener('click', completeSale);
-  
-  // Clear
-  elements.btnClear.addEventListener('click', () => {
-    if (ticket.length > 0 && confirm('¿Limpiar ticket?')) {
-      ticket = [];
-      updateTicket();
-      toast('Ticket limpiado');
-    }
-  });
-  
-  // Escape key
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      closeCamera();
-      closeProductModal();
-      closeSearchModal();
-    }
-  });
-}
-
-// ==================== CÁMARA ====================
-async function openCamera() {
-  try {
-    els.modalOverlay.style.display = 'block';
-    els.cameraModal.style.display = 'flex';
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' },
-    });
-    els.cameraVideo.srcObject = stream;
-    els.cameraError.textContent = '';
-    els.cameraModal.dataset.stream = 'active';
-    // Start auto-scanning
-    startAutoScan();
-  } catch (err) {
-    console.error('Error cámara:', err);
-    els.cameraError.textContent = 'No se pudo acceder a la cámara. Permite el acceso en el navegador.';
-    closeCamera();
-  }
-}
-
-function closeCamera() {
-  stopAutoScan();
-  const stream = els.cameraVideo.srcObject;
-  if (stream) {
-    stream.getTracks().forEach(t => t.stop());
-  }
-  els.cameraVideo.srcObject = null;
-  els.modalOverlay.style.display = 'none';
-  els.cameraModal.style.display = 'none';
-  els.cameraResult.innerHTML = '';
-  delete els.cameraModal.dataset.stream;
-}
-
-async function captureAndScan() {
-  const video = elements.cameraVideo;
-  const canvas = elements.cameraCanvas;
-  
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0);
-  
-  const imageData = canvas.toDataURL('image/jpeg', 0.9);
-  
-  els.cameraStatus.textContent = 'Escaneando...';
-  
-  try {
-    const result = await Tesseract.recognize(imageData, 'spa', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          els.cameraStatus.textContent = `Escaneando... ${Math.round(m.progress * 100)}%`;
-        }
-      }
-    });
-    
-    const text = result.data.text;
-    const barcode = extractBarcode(text);
-    
-    if (barcode) {
-      els.cameraStatus.textContent = `Código encontrado: ${barcode}`;
-      await lookupProduct(barcode);
-    } else {
-      els.cameraStatus.textContent = 'No se encontró código. Intenta de nuevo.';
-      toast('No se detectó código de barras', 'error');
-    }
-    
-  } catch (error) {
-    console.error('OCR error:', error);
-    toast('Error al escanear', 'error');
-    els.cameraStatus.textContent = 'Error. Intenta de nuevo.';
-  }
-}
-
-function startAutoScan() {
-  stopAutoScan();
-  
-  if (!cameraStream) return;
-  
-  scanInterval = setInterval(async () => {
-    if (!cameraStream || els.cameraVideo.readyState !== HTMLVideoElement.HAVE_ENOUGH_DATA) return;
-    
-    const video = els.cameraVideo;
-    const canvas = els.cameraCanvas;
-    const ctx = canvas.getContext('2d');
-    
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0);
-    
-    const imageData = canvas.toDataURL('image/jpeg', 0.9);
-    
-    try {
-      const result = await Tesseract.recognize(imageData, 'spa', {
-        logger: m => {}
-      });
-      
-      const text = result.data.text;
-      const barcode = extractBarcode(text);
-      
-      if (barcode && barcode !== lastBarcode) {
-        lastBarcode = barcode;
-        els.cameraStatus.textContent = `Código encontrado: ${barcode}`;
-        await lookupProduct(barcode);
-      }
-    } catch (error) {
-      // Continue scanning
-    }
-  }, 500);
-}
-
-function stopAutoScan() {
-  if (scanInterval) {
-    clearInterval(scanInterval);
-    scanInterval = null;
-  }
-}
-
-async function captureAndScan() {
-  const video = elements.cameraVideo;
-  const canvas = elements.cameraCanvas;
-  
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0);
-  
-  const imageData = canvas.toDataURL('image/jpeg', 0.9);
-  
-  els.cameraStatus.textContent = 'Escaneando...';
-  
-  try {
-    const result = await Tesseract.recognize(imageData, 'spa', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          els.cameraStatus.textContent = `Escaneando... ${Math.round(m.progress * 100)}%`;
-        }
-      }
-    });
-    
-    const text = result.data.text;
-    const barcode = extractBarcode(text);
-    
-    if (barcode) {
-      els.cameraStatus.textContent = `Código encontrado: ${barcode}`;
-      await lookupProduct(barcode);
-    } else {
-      els.cameraStatus.textContent = 'No se encontró código. Intenta de nuevo.';
-      toast('No se detectó código de barras', 'error');
-    }
-    
-  } catch (error) {
-    console.error('OCR error:', error);
-    toast('Error al escanear', 'error');
-    els.cameraStatus.textContent = 'Error. Intenta de nuevo.';
-  }
-}
-
-// ==================== PRODUCT LOOKUP ====================
-async function lookupProduct(barcode) {
-  stopAutoScan();
-  
-  try {
-    const response = await fetch(
-      `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`
-    );
-    
-    const data = await response.json();
-    
-    closeCamera();
-    
-    if (data.status === 1 && data.product) {
-      const p = data.product;
-      currentProduct = {
-        id: barcode,
-        name: p.product_name || p.product_name_es || p.product_name_en || 'Producto',
-        price: p.price || parseFloat((Math.random() * 30 + 10).toFixed(2)),
-        barcode: barcode,
-        photo_url: p.image_url || p.image_front_url || '',
-        category: p.categories || ''
-      };
-      
-      showProductModal();
-      
-    } else {
-      // Product not in database - let user enter manually
-      currentProduct = {
-        id: barcode,
-        name: 'Producto desconocido',
-        price: 0,
-        barcode: barcode,
-        photo_url: '',
-        category: ''
-      };
-      
-      showProductModal();
-      toast('Producto no encontrado en base de datos', 'warning');
-    }
-    
-  } catch (error) {
-    console.error('Lookup error:', error);
-    closeCamera();
-    
-    currentProduct = {
-      id: barcode,
-      name: 'Producto',
-      price: 0,
-      barcode: barcode,
-      photo_url: '',
-      category: ''
-    };
-    
-    showProductModal();
-    toast('Error al buscar producto', 'error');
-  }
-}
-
-function showProductModal() {
-  elements.productTitle.textContent = currentProduct.name;
-  elements.productBarcode.textContent = currentProduct.barcode ? `Código: ${currentProduct.barcode}` : '';
-  elements.productPrice.value = '';
-  elements.productPrice.focus();
-  
-  // Show image if available
-  if (currentProduct.photo_url) {
-    elements.productPreview.innerHTML = `<img src="${currentProduct.photo_url}" alt="${currentProduct.name}">`;
-  } else {
-    elements.productPreview.innerHTML = `
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-        <path d="M21 15l-5-5L5 21"></path>
-      </svg>
-    `;
-  }
-  
-  elements.productOverlay.classList.add('visible');
-  elements.productModal.classList.add('visible');
-}
-
-function closeProductModal() {
-  currentProduct = null;
-  elements.productOverlay.classList.remove('visible');
-  elements.productModal.classList.remove('visible');
-}
-
-// ==================== TICKET ====================
 function addToTicket() {
-  const price = parseFloat(elements.productPrice.value);
+  const price = parseFloat(els.productPrice.value);
   
   if (!price || price <= 0) {
     toast('Ingresa un precio válido', 'error');
@@ -680,7 +439,7 @@ function addToTicket() {
     existing.total = existing.quantity * existing.price;
   } else {
     ticket.push({
-      id: Date.now(),
+      id: Date.now().toString(),
       name: currentProduct.name,
       barcode: currentProduct.barcode,
       image: currentProduct.image,
@@ -691,309 +450,40 @@ function addToTicket() {
   }
   
   closeProductModal();
-  updateCart();
+  updateTicket();
   toast(`${currentProduct.name} agregado`);
 }
 
-function updateCart() {
-  const total = ticket.reduce((sum, item) => sum + item.total, 0);
-
-  elements.subtotal.textContent = `$${total.toFixed(2)}`;
-  elements.tax.textContent = `$0.00`;
-  elements.total.textContent = `$${total.toFixed(2)}`;
-
-  elements.cartItems.innerHTML = '';
-  if (cart.length === 0) {
-    elements.ticketEmpty.style.display = 'flex';
-    elements.btnCharge.disabled = true;
-  } else {
-    elements.ticketEmpty.style.display = 'none';
-    elements.btnCharge.disabled = false;
-    cart.forEach(item => {
-      const div = document.createElement('div');
-      div.className = 'cart-item';
-      const product = products.find(p => p.id === item.productId);
-      div.innerHTML = `
-        <div class="cart-item">
-          <div class="item-info">
-            <div class="item-name">${escapeHtml(item.name)}</div>
-            <div class="item-price">$${item.unitPrice.toFixed(2)} c/u</div>
-          </div>
-          <div class="item-controls">
-            <button class="btn-qty" onclick="updateQuantity('${item.productId}', -1)">−</button>
-            <span class="item-qty">${item.quantity}</span>
-            <button class="btn-qty" onclick="updateQuantity('${item.productId}', 1)">+</button>
-          </div>
-          <div class="item-total">$${item.total.toFixed(2)}</div>
-          <button class="remove-btn" onclick="removeItem('${item.productId}')">×</button>
-        </div>
-      `;
-      els.ticketItems.appendChild(div);
-    });
-  }
-
-  calculateChange();
-}
-
-function calculateChange() {
-  const given = parseFloat(elements.received.value) || 0;
-  const total = ticket.reduce((sum, item) => sum + item.total, 0);
-  const change = given - total;
-  elements.change.textContent = change >= 0 ? `$${change.toFixed(2)}` : `$0.00`;
-  els.change.style.color = change >= 0 ? '#10b981' : '#ef4444';
-}
-
-// ==================== BÚSQUEDA DE PRECIOS WEB (sin backend) ====================
-async function buscarPrecioWeb(producto) {
-  if (!producto) return;
-
-  const btn = event ? event.target : null;
-  const originalText = btn ? btn.textContent : '';
-  if (btn) {
-    btn.textContent = '⏳';
-    btn.disabled = true;
-  }
-
+// ==================== PRICE SEARCH ====================
+async function searchPrices(productName) {
   try {
-    // Buscar en MercadoLibre México (API pública, sin autenticación)
-    const query = encodeURIComponent(producto);
     const response = await fetch(
-      `https://api.mercadolibre.com.mx/sites/MLM/search?q=${query}&limit=10`
+      `https://api.mercadolibre.com/sites/MLM/search?q=${encodeURIComponent(productName)}&limit=5`
     );
-
-    if (!response.ok) {
-      throw new Error('Error en la respuesta de MercadoLibre');
-    }
-
+    
+    if (!response.ok) return;
+    
     const data = await response.json();
     const results = data.results || [];
-
-    if (results.length === 0) {
-      if (btn) {
-        btn.textContent = originalText;
-        btn.disabled = false;
+    
+    if (results.length > 0) {
+      const avgPrice = results.reduce((sum, r) => sum + (r.price || 0), 0) / results.length;
+      
+      if (avgPrice > 0 && !els.productPrice.value) {
+        els.productPrice.value = avgPrice.toFixed(2);
       }
-      alert('No se encontraron productos para: ' + producto);
-      return;
     }
-
-    // Transformar resultados al formato de mostrarResultadosPrecio
-    const transformed = {
-      organic_results: results.map(item => ({
-        title: item.title,
-        price: item.price ? `$${item.price.toFixed(2)}` : 'Consultar',
-        link: item.permalink,
-        snippet: item.sold_quantity ? `Ventas: ${item.sold_quantity}` : '',
-      })),
-      shopping_results: [],
-      total_results: data.results.length,
-    };
-
-    if (btn) {
-      btn.textContent = originalText;
-      btn.disabled = false;
-    }
-
-    priceSearchResults = transformed;
-    mostrarResultadosPrecio(transformed, producto);
-
-  } catch (err) {
-    console.error('Error buscando precios:', err);
-    if (btn) {
-      btn.textContent = originalText;
-      btn.disabled = false;
-    }
-    alert('No se pudieron obtener precios en este momento. Intenta de nuevo.');
+  } catch (error) {
+    // Silent fail
   }
 }
 
-function mostrarResultadosPrecio(data, producto) {
-  const organic = data.organic_results || [];
-  const shopping = data.shopping_results || [];
-
-  let html = `
-    <div class="price-results-header">
-      <h3>🔍 Precios para: <strong>${escapeHtml(producto)}</strong></h3>
-      <p>Resultados en Walmart México (vía Google)</p>
-      <div class="price-results-stats">
-        <span>Total resultados: ${data.total_results || 0}</span>
-      </div>
-    </div>
-  `;
-
-  if (shopping.length > 0) {
-    html += `<div class="price-section"><h4>🛒 Productos destacados</h4><div class="price-grid">`;
-    shopping.forEach((item, idx) => {
-      html += `
-        <div class="price-card">
-          <div class="price-card-title">${escapeHtml(item.title)}</div>
-          ${item.price ? `<div class="price-card-price">${item.price}</div>` : '<div class="price-card-price">Precio no disponible</div>'}
-          ${item.thumbnail ? `<img src="${item.thumbnail}" alt="${escapeHtml(item.title)}" class="price-card-img">` : ''}
-          ${item.link ? `<a href="${item.link}" target="_blank" class="price-card-link">Ver en Walmart →</a>` : ''}
-        </div>
-      `;
-    });
-    html += `</div></div>`;
-  }
-
-  if (organic.length > 0) {
-    html += `<div class="price-section"><h4>📋 Otros resultados</h4><div class="price-list">`;
-    organic.slice(0, 5).forEach((item) => {
-      html += `
-        <div class="price-item">
-          <div class="price-item-title">${escapeHtml(item.title)}</div>
-          ${item.price ? `<div class="price-item-price">${item.price}</div>` : ''}
-          ${item.snippet ? `<div class="price-item-snippet">${escapeHtml(item.snippet)}</div>` : ''}
-          ${item.link ? `<a href="${item.link}" target="_blank" class="price-item-link">Ver enlace →</a>` : ''}
-        </div>
-      `;
-    });
-    html += `</div></div>`;
-  }
-
-  if (organic.length === 0 && shopping.length === 0) {
-    html += `<div class="price-empty">No se encontraron precios para este producto en Walmart México.</div>`;
-  }
-
-  // Mostrar en modal o panel temporal
-  const existing = document.getElementById('price-results-modal');
-  if (existing) existing.remove();
-
-  const modal = document.createElement('div');
-  modal.id = 'price-results-modal';
-  modal.className = 'modal';
-  modal.innerHTML = `
-    <div class="modal-header">
-      <h3>Precios Web</h3>
-      <button class="btn-close" onclick="cerrarPrecioModal()">✕</button>
-    </div>
-    <div class="modal-body" style="max-height: 500px; overflow-y: auto;">
-      ${html}
-    </div>
-    <div style="padding: 1rem;">
-      <button class="btn-secondary btn-full" onclick="cerrarPrecioModal()">Cerrar</button>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-  modal.style.display = 'flex';
+function closeSearchModal() {
+  els.searchOverlay.classList.remove('visible');
+  els.searchModal.classList.remove('visible');
 }
 
-window.cerrarPrecioModal = function() {
-  const modal = document.getElementById('price-results-modal');
-  if (modal) {
-    modal.remove();
-  }
-};
-
-// ==================== CÁMARA ====================
-
-// ==================== TICKET ====================
-function addToTicket() {
-  const price = parseFloat(elements.productPrice.value);
-  
-  if (!price || price <= 0) {
-    toast('Ingresa un precio válido', 'error');
-    return;
-  }
-  
-  if (!currentProduct) return;
-  
-  // Check if already in ticket
-  const existing = ticket.find(t => t.barcode === currentProduct.barcode);
-  
-  if (existing) {
-    existing.quantity++;
-    existing.total = existing.quantity * existing.price;
-  } else {
-    ticket.push({
-      id: Date.now(),
-      name: currentProduct.name,
-      barcode: currentProduct.barcode,
-      image: currentProduct.image,
-      price: price,
-      quantity: 1,
-      total: price
-    });
-  }
-  
-  closeProductModal();
-  updateCart();
-  toast(`${currentProduct.name} agregado`);
-}
-
-// ==================== MENÚ LATERAL ====================
-elements.btnMenu.addEventListener('click', () => {
-  els.sidebarMenu.style.display = 'flex';
-});
-els.btnCloseMenu.addEventListener('click', () => {
-  els.sidebarMenu.style.display = 'none';
-});
-
-// ==================== GESTIONAR PRODUCTOS ====================
-els.btnManageProducts.addEventListener('click', () => {
-  els.sidebarMenu.style.display = 'none';
-  els.modalProductsOverlay.style.display = 'block';
-  els.modalProducts.style.display = 'flex';
-  delete els.modalProducts.dataset.editingId;
-  limpiarFormularioProducto();
-  loadExistingProducts();
-});
-
-els.btnCloseProducts.addEventListener('click', () => {
-  els.modalProductsOverlay.style.display = 'none';
-  els.modalProducts.style.display = 'none';
-});
-
-els.modalProductsOverlay.addEventListener('click', () => {
-  els.modalProductsOverlay.style.display = 'none';
-  els.modalProducts.style.display = 'none';
-});
-
-// ==================== EXPORTAR CSV ====================
-els.btnExportCsv.addEventListener('click', () => {
-  if (sales.length === 0) {
-    alert('No hay ventas para exportar');
-    return;
-  }
-  let csv = 'Fecha,Productos,Total,Recibido,Cambio\n';
-  sales.forEach(s => {
-    const fecha = new Date(s.created_at).toLocaleString('es-MX');
-    const items = s.items.reduce((sum, it) => sum + it.quantity, 0);
-    csv += `"${fecha}",${items},${s.total.toFixed(2)},${s.amount_given.toFixed(2)},${s.change.toFixed(2)}\n`;
-  });
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'ventas-abarrotes.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-// ==================== IMPORTAR OPEN FOOD FACTS ====================
-els.btnImportOpenFood.addEventListener('click', () => {
-  const barcode = prompt('Ingresa el código de barras del producto:');
-  if (!barcode) return;
-  fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`)
-    .then(r => r.json())
-    .then(data => {
-      if (data.status === 1 && data.product) {
-        const p = data.product;
-        els.prodName.value = p.product_name || p.product_name_es || 'Producto sin nombre';
-        els.prodCategory.value = p.categories || '';
-        els.prodBarcode.value = barcode;
-        els.modalProductsOverlay.style.display = 'block';
-        els.modalProducts.style.display = 'flex';
-        alert('Producto encontrado en Open Food Facts. Completa el precio y guarda.');
-      } else {
-        alert('Producto no encontrado en Open Food Facts');
-      }
-    })
-    .catch(() => alert('Error consultando Open Food Facts'));
-});
-
-// ==================== UTILIDADES ====================
+// ==================== UTILITIES ====================
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
@@ -1005,13 +495,7 @@ function toast(message, type = '') {
   el.className = `toast ${type}`;
   el.textContent = message;
   
-  elements.toastContainer.appendChild(el);
+  els.toastContainer.appendChild(el);
   
   setTimeout(() => el.remove(), 3000);
 }
-
-// Initialize on DOM ready
-document.addEventListener('DOMContentLoaded', () => {
-  setupEventListeners();
-  updateCart();
-});
